@@ -287,7 +287,7 @@ def test_mystery_distribution(output_dir: str):
     output_file = os.path.join(*[output_dir, "Mystery-distributions-results.csv"])
 
     df = pd.read_csv(mystery_distribution_file)
-    result = pd.DataFrame(df.apply(get_best_distribution, axis=0))
+    result = pd.DataFrame.from_records([i for i in df.apply(get_best_distribution, axis=0)])
     pd.DataFrame.from_records(result).to_csv(output_file, index=False)
     print(result)
 
