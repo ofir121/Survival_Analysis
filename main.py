@@ -66,6 +66,34 @@ def get_na_columns(df: DataFrame) -> List[str]:
     return df.columns[df.isna().any()].tolist()
 
 
+def filter_lowly_expressed_genes(cpm_counts_df: DataFrame, X: float, Y: float, to_print=True) -> DataFrame:
+    """
+    Filter the count data for lowly-expressed genes.
+    Only keep genes with a CPM >= X in at least Y% samples
+    :param cpm_counts_df:
+    :param X: The minimum number of CPM for at least Y% samples
+    :param Y: The percentage of number of samples that need to pass threshold in each group
+    :param Z: The minimum number of groups that need to pass the filter for each gene
+    :param to_print: Print step name
+    :return: A filtered dataframe without lowly-expressed genes
+    """
+    to_keep_genes = []
+    count_passed_filter_genes_dict = defaultdict(lambda: 0)
+    if to_print:
+        print("Filtering lowly expressed genes")
+    num_of_samples = len(cpm_counts_df)
+    pass_filter_count = cpm_counts_df[cpm_counts_df > X].count()
+    min_num_of_samples = num_of_samples * (Y / 100)
+    for g, passed_sample_count in pass_filter_count.items():
+        if passed_sample_count >= min_num_of_samples:
+            count_passed_filter_genes_dict[g] += 1
+    for k, v in count_passed_filter_genes_dict.items():
+        if v >= 1:
+            to_keep_genes.append(k)
+    filtered_df = cpm_counts_df[to_keep_genes]
+    return filtered_df
+
+
 def clean_data(df: DataFrame):
     """
     Clean the dataframe from NA values by mean of feature
@@ -79,15 +107,19 @@ def clean_data(df: DataFrame):
     return df_cleaned
 
 
-def get_top_k_variance_genes(df: DataFrame, k=1000) -> List:
+def get_top_k_variance_genes(df: DataFrame,  output_dir: str, k=1000) -> List:
     """
     Get the top k genes with the highest variances in the dataframe
     :param df: Dataframe
     :param k: The number of top elements to return
+    :param output_dir: Output directory
     :return: A list of top k genes with the highest variances
     """
+    output_file = os.path.join(*[output_dir, f"(a)-Top-{k}-Variance-Genes.csv"])
     df_variances = df.transpose().var()
     high_variance_genes = list(df_variances.nlargest(k).index)
+    df_result = pd.DataFrame(pd.Series(high_variance_genes, name="Gene"))
+    df_result.to_csv(output_file)
     return high_variance_genes
 
 
@@ -112,11 +144,13 @@ def run_cox_analysis(df_test_variables: DataFrame, df_clinical: DataFrame, p_val
         results['pvalue'].append(result.summary["p"][0])
         results['coef'].append(result.summary["coef"][0])
         results['Variable'].append(list(df_gene.columns)[0])
-    results['fdr'] = fdrcorrection(results['pvalue'])[
-        1]  # Many tests were made and therefor FDR will adjust the pvalue and reduce false positives
+    results['fdr'] = fdrcorrection(results['pvalue'])[1]  # Many tests were made and therefore FDR will adjust the pvalue with fdr to reduce false positives
     df_results = pd.DataFrame.from_dict(results)
-    df_results_significant = df_results[df_results['pvalue'] < p_value_threshold]
+    df_results_significant = df_results[df_results['fdr'] < p_value_threshold]
     df_results_significant.set_index('Variable', inplace=True)
+    df_results_significant['survival_effect'] = df_results_significant['coef'].apply(
+        lambda x: 'Negative correlated with survival' if x > 0 else 'Positive correlated with survival')
+
     print(df_results_significant)
     return df_results_significant
 
@@ -157,46 +191,55 @@ def test_expression_survival_association(df_genes: DataFrame, df_clinical: DataF
 
     # Run without demographics
     print("Results for genes without demographics")
-    df_results_significant = run_cox_analysis(df_genes, df_clinical[['status', 'time']])
-    output_file = os.path.join(*[output_dir, "Significant-Genes-Cox-Results.csv"])
-    df_results_significant.to_csv(output_file)
+    df_results_no_control = run_cox_analysis(df_genes, df_clinical[['status', 'time']])
+    output_file = os.path.join(*[output_dir, "(b)-Significant-Genes-Cox-Results.csv"])
+    df_results_no_control.to_csv(output_file)
 
     # Run with demographics
     print("Results for genes with demographics control")
-    df_results_significant_with_demographic = run_cox_analysis(df_genes, df_clinical)
-    output_file = os.path.join(*[output_dir, "Significant-Genes-With-Demographics-Cox-Results.csv"])
-    df_results_significant.to_csv(output_file)
+    df_results_with_demographics = run_cox_analysis(df_genes, df_clinical)
 
     # Get distinct genes that don't relay on demographics
-    df_results_significant_distinct = df_results_significant[
-        ~df_results_significant.index.isin(df_results_significant_with_demographic.index)].dropna(how='all')
+    df_results_with_control = df_results_no_control[
+        ~df_results_no_control.index.isin(df_results_with_demographics.index)].dropna(how='all')
     print("Results for genes that don't relay on demographic")
-    print(df_results_significant_distinct)
-    output_file = os.path.join(*[output_dir, "Significant-Genes-Excluding-Demographics-Cox-Results.csv"])
-    df_results_significant.to_csv(output_file)
+    print(df_results_with_control)
+    output_file = os.path.join(*[output_dir, "(c)-Significant-Genes-Excluding-Demographics-Significance-Cox-Results.csv"])
+    df_results_with_control.to_csv(output_file)
 
+    # Get distinct genes that do relay on demographic
+    print("Genes that were removed because they relay on demographics")
+    df_results_that_were_removed_using_control = df_results_no_control[
+        df_results_no_control.index.isin(df_results_with_demographics.index)].dropna(how='all')
+    output_file = os.path.join(*[output_dir, "(d)-Significant-Genes-With-Demographics-Cox-Results.csv"])
+    df_results_that_were_removed_using_control.to_csv(output_file)
+    print(df_results_that_were_removed_using_control)
 
 ############### Task 2 ###################
 
 
 def get_best_distribution(data: Series, print_statistics=True):
     """
-    Find the best distribution for the data and it's parameters
+    Find the best distribution for the data and its parameters
     :param data: A series of data points from the distribution
     :param print_statistics: Print the statistics to stdout
     :return: The best distribution name, p-value that the data does NOT belong to the distribution, the distribution parameters
     """
     if print_statistics:
         print(f"Checking distribution for: {data.name}")
+    # Continuous distributions
     cont_dist_names = ["norm", "gamma", "uniform", "expon"]  #
-    # Define variables for disntinct
+    # Define variables for discrete distribtuions
     mean = data.mean()
     var = data.var()
     p = mean / var
     n = p * data.mean() / (1 - p)
     args = {'p': p, 'n': n, 'mu': mean}
+    # Discrete distributions
     disc_dist = {"geom": {'p': p},
-                 "binom": {"n": n, "p": p}, "nbinom": {"n": n, "p": p}, "poisson": {'mu': mean},
+                 "binom": {"n": n, "p": p},
+                 "nbinom": {"n": n, "p": p},
+                 "poisson": {'mu': mean},
                  "bernoulli": {'p': p}}  # , "hypergeom": {}, }
     dist_results = []
     params = {}
@@ -245,7 +288,7 @@ def test_mystery_distribution(output_dir: str):
 
     df = pd.read_csv(mystery_distribution_file)
     result = pd.DataFrame(df.apply(get_best_distribution, axis=0))
-    pd.DataFrame(result).to_csv(output_file, index=False)
+    pd.DataFrame.from_records(result).to_csv(output_file, index=False)
     print(result)
 
 
@@ -402,10 +445,12 @@ def main():
         output_dir = prepare_output_dir_for_task_i(output_dir_base, 1)
         print("Running task 1:", end="\n\n")
         df_mrna = read_rna_matrix(input_dir, output_dir)
-        df_mrna = normalize_cpm(df_mrna.transpose()).transpose()
+
+        df_mrna = normalize_cpm(df_mrna.transpose()).transpose()  # Normalize by CPM calculation
         df_mrna = clean_data(df_mrna)
+        df_mrna = filter_lowly_expressed_genes(df_mrna.transpose(), 1, 50).transpose()  # Filter lowly expressed genes - only keep threshold above 1 in at least 50% of the samples
         df_mrna = log_cpm(df_mrna)
-        top_variance_genes = get_top_k_variance_genes(df_mrna, k=num_of_top_genes)
+        top_variance_genes = get_top_k_variance_genes(df_mrna, output_dir, k=num_of_top_genes)
         df_clinical = read_clinical_data(input_dir)
         df_mrna_top_variance_genes = df_mrna.filter(items=top_variance_genes, axis='index')
         test_expression_survival_association(df_mrna_top_variance_genes, df_clinical, output_dir)
