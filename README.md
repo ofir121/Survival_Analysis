@@ -1,14 +1,14 @@
 # Survival analysis of mRNA expression dataset
 
-The analysis is divided into 3 parts. Each part is divided into function which runs from the main functions.
+The analysis is divided into 3 parts. Each part is divided into function which runs from the main function.
 Each part functions are noted by a comment (#Part x)
 
-External libraries uses (Need to be installed): matplotlib, lifelines, scipy, statsmodels, sklearn, panadas, numpy
+External libraries that were used (Need to be installed): matplotlib, lifelines, scipy, statsmodels, sklearn, panadas, numpy
 
-#### Run the script using: "python main.py" (After installing necessary libraries)
+#### Running the script using: "python main.py" (After installing necessary libraries)
 
 
-
+Below you will find the output files for each part and all the answers to the exercise questions.
 
 ## Task 1
 
@@ -34,8 +34,7 @@ Output file: (a)-Top-1000-Variance-Genes.csv
 
 Output file: (b)-Significant-Genes-Cox-Results.csv
 
-##### c. Perform a similar analysis to the one performed in (a), but this time the analysis should
-control for the age at diagnosis, gender and race of the patients.
+##### c. Perform a similar analysis to the one performed in (a), but this time the analysis should control for the age at diagnosis, gender and race of the patients.
 
 Output file: (c)-Significant-Genes-Excluding-Demographics-Significance-Cox-Results.csv
 
