@@ -1,0 +1,4 @@
+0
+"{'Feature name': 'Distribution_1', 'Distribution': 'uniform', 'Reject pvalue': 0.942092404520339, 'Params': (1.024889766, 99.970130334)}"
+"{'Feature name': 'Distribution_2', 'Distribution': 'gamma', 'Reject pvalue': 0.8090841266096345, 'Params': (26203.82501103616, -321.59002386178224, 0.01231085782388334)}"
+"{'Feature name': 'Distribution_3', 'Distribution': 'gamma', 'Reject pvalue': 0.9752796449809968, 'Params': (0.9864547636044176, 2.1599999999999956e-05, 2.0141439299022377)}"
